@@ -47,7 +47,13 @@ fn main()->Result<()> {
             let mut encoder= ZlibEncoder::new(Vec::new(), Compression::default());
             encoder.write_all(&store)?;
             let compressed_bytes = encoder.finish()?;
-            println!("Hash {}", hash_hex);
+            
+            let directory_name = &hash_hex[..2];
+            let filename = &hash_hex[2..];
+            
+            fs::create_dir_all(format!(".mimir/objects/{}", directory_name))?;
+            fs::write(format!(".mimir/objects/{}/{}", directory_name,filename), compressed_bytes)?;
+            
         }
     }
     
