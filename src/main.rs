@@ -5,7 +5,8 @@ use sha1::{Sha1, Digest};
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use std::io::Write;
-
+use flate2::read::ZlibDecoder;
+use std::io::Read;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about=None)]
@@ -16,10 +17,15 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    /// Initialize a new and empty repo
     Init,
     HashObject {
         file: std::path::PathBuf,
+    },
+    CatFile {
+        #[arg(short='p')]
+        pretty: bool,
+        
+        object:String,
     }
 }
 
@@ -53,7 +59,26 @@ fn main()->Result<()> {
             
             fs::create_dir_all(format!(".mimir/objects/{}", directory_name))?;
             fs::write(format!(".mimir/objects/{}/{}", directory_name,filename), compressed_bytes)?;
+            println!("{}",hash_hex);
+        }
+        Command::CatFile { pretty, object } => {
+            if !pretty {
+                anyhow::bail!("For now, you must use the -p flag");                
+            }
+            let directory_name = &object[..2];
+            let filename = &object[2..];
             
+            let path = format!(".mimir/objects/{}/{}", directory_name,filename);
+            let compressed_bytes = std::fs::read(&path)?;
+            let mut decoder = ZlibDecoder::new(&compressed_bytes[..]);
+            let mut decompressed_bytes = Vec::new();
+            decoder.read_to_end(&mut decompressed_bytes)?;
+            
+            let null_byte_index = decompressed_bytes.iter().position(|&b| b==0).unwrap();
+            let content = &decompressed_bytes[null_byte_index+1..];
+            std::io::stdout().write_all(content)?;
+            
+            println!("{} {}", compressed_bytes.len(), path)
         }
     }
     
