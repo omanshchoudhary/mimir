@@ -1,6 +1,11 @@
 use clap::{Parser, Subcommand};
 use anyhow::Result;
 use std::fs;
+use sha1::{Sha1, Digest};
+use flate2::write::ZlibEncoder;
+use flate2::Compression;
+use std::io::Write;
+
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about=None)]
@@ -13,6 +18,9 @@ struct Cli {
 enum Command {
     /// Initialize a new and empty repo
     Init,
+    HashObject {
+        file: std::path::PathBuf,
+    }
 }
 
 fn main()->Result<()> {
@@ -25,6 +33,22 @@ fn main()->Result<()> {
             fs::write(".mimir/HEAD", "ref: refs/heads/main\n")?;
             println!("Initialized empty mimir repo");
         } 
+        Command::HashObject { file } => {
+            let content = std::fs::read(&file)?;
+            let header = format!("blob {}\0", content.len());
+            let mut store = header.into_bytes();
+            store.extend(content);
+           
+            let mut hasher = Sha1::new();
+            hasher.update(&store);
+            let hash_result = hasher.finalize();
+            let hash_hex = hex::encode(hash_result);
+            
+            let mut encoder= ZlibEncoder::new(Vec::new(), Compression::default());
+            encoder.write_all(&store)?;
+            let compressed_bytes = encoder.finish()?;
+            println!("Hash {}", hash_hex);
+        }
     }
     
     Ok(())    
