@@ -40,26 +40,8 @@ fn main()->Result<()> {
             println!("Initialized empty mimir repo");
         } 
         Command::HashObject { file } => {
-            let content = std::fs::read(&file)?;
-            let header = format!("blob {}\0", content.len());
-            let mut store = header.into_bytes();
-            store.extend(content);
-           
-            let mut hasher = Sha1::new();
-            hasher.update(&store);
-            let hash_result = hasher.finalize();
-            let hash_hex = hex::encode(hash_result);
-            
-            let mut encoder= ZlibEncoder::new(Vec::new(), Compression::default());
-            encoder.write_all(&store)?;
-            let compressed_bytes = encoder.finish()?;
-            
-            let directory_name = &hash_hex[..2];
-            let filename = &hash_hex[2..];
-            
-            fs::create_dir_all(format!(".mimir/objects/{}", directory_name))?;
-            fs::write(format!(".mimir/objects/{}/{}", directory_name,filename), compressed_bytes)?;
-            println!("{}",hash_hex);
+            let hash = write_blob(&file)?;
+            println!("{}", hash);
         }
         Command::CatFile { pretty, object } => {
             if !pretty {
@@ -83,4 +65,28 @@ fn main()->Result<()> {
     }
     
     Ok(())    
+}
+
+fn write_blob(file:&std::path::Path) -> anyhow::Result<String> {
+    let content = std::fs::read(&file)?;
+    let header = format!("blob {}\0", content.len());
+    let mut store = header.into_bytes();
+    store.extend(content);
+   
+    let mut hasher = Sha1::new();
+    hasher.update(&store);
+    let hash_result = hasher.finalize();
+    let hash_hex = hex::encode(hash_result);
+    
+    let mut encoder= ZlibEncoder::new(Vec::new(), Compression::default());
+    encoder.write_all(&store)?;
+    let compressed_bytes = encoder.finish()?;
+    
+    let directory_name = &hash_hex[..2];
+    let filename = &hash_hex[2..];
+    
+    fs::create_dir_all(format!(".mimir/objects/{}", directory_name))?;
+    fs::write(format!(".mimir/objects/{}/{}", directory_name,filename), compressed_bytes)?;
+    
+    Ok(hash_hex)
 }
