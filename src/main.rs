@@ -1,8 +1,8 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use flate2::Compression;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
+use flate2::Compression;
 use sha1::{Digest, Sha1};
 use std::fs;
 use std::io::Read;
@@ -43,6 +43,7 @@ enum Command {
         #[arg(short = 'm')]
         message: String,
     },
+    Log,
 }
 
 fn main() -> Result<()> {
@@ -92,26 +93,85 @@ fn main() -> Result<()> {
         }
         Command::Commit { message } => {
             let head_content = fs::read_to_string(".mimir/HEAD")?;
-            
+
             let ref_path = head_content.trim().strip_prefix("ref: ").unwrap();
             let branch_file_path = format!(".mimir/{}", ref_path);
-            
+
             let parent_hash = if std::path::Path::new(&branch_file_path).exists() {
-                Some(std::fs::read_to_string(&branch_file_path)?.trim().to_string())
+                Some(
+                    std::fs::read_to_string(&branch_file_path)?
+                        .trim()
+                        .to_string(),
+                )
             } else {
                 None
             };
-            
-            let tree_hash= build_tree(std::path::Path::new("."))?;
-            
+
+            let tree_hash = build_tree(std::path::Path::new("."))?;
+
             let commit_hash = write_commit(&tree_hash, &message, parent_hash.as_deref())?;
-            
+
             if let Some(parent_dir) = std::path::Path::new(&branch_file_path).parent() {
                 std::fs::create_dir_all(parent_dir)?;
             }
-            std::fs::write(&branch_file_path, format!("{}\n",commit_hash))?;
-            
+            std::fs::write(&branch_file_path, format!("{}\n", commit_hash))?;
+
             println!("Commited to branch main: {}", commit_hash);
+        }
+        Command::Log => {
+            let head_content = std::fs::read_to_string(".mimir/HEAD")?;
+            let ref_path = head_content.trim().strip_prefix("ref: ").unwrap();
+            let branch_file_path = format!(".mimir/{}", ref_path);
+
+            if !std::path::Path::new(&branch_file_path).exists() {
+                println!("No commits yet!");
+                return Ok(());
+            }
+
+            let mut current_hash = std::fs::read_to_string(&branch_file_path)?
+                .trim()
+                .to_string();
+
+            loop {
+                let directory_name = &current_hash[..2];
+                let filename = &current_hash[2..];
+                let path = format!(".mimir/objects/{}/{}", directory_name, filename);
+
+                let compressed_bytes = std::fs::read(&path)?;
+                let mut decoder = ZlibDecoder::new(&compressed_bytes[..]);
+                let mut decompressed_bytes = Vec::new();
+                decoder.read_to_end(&mut decompressed_bytes)?;
+
+                let null_byte_index = decompressed_bytes.iter().position(|&b| b == 0).unwrap();
+                let content_bytes = &decompressed_bytes[null_byte_index + 1..];
+
+                let content_str = std::string::String::from_utf8_lossy(content_bytes);
+
+                println!("commit {}", current_hash);
+
+                let mut lines = content_str.lines();
+                let mut parent_hash = None;
+
+                for line in &mut lines {
+                    if line.starts_with("parent ") {
+                        parent_hash = Some(line.strip_prefix("parent ").unwrap().to_string());
+                    } else if line.is_empty() {
+                        break;
+                    }
+                }
+
+                println!();
+                for msg_line in lines {
+                    println!("    {}", msg_line);
+                }
+                println!();
+
+                if let Some(p) = parent_hash {
+                    current_hash = p;
+                } else {
+                    break;
+                }
+            }
         }
     }
 
