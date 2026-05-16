@@ -91,7 +91,27 @@ fn main() -> Result<()> {
             println!("{}", hash_hex);
         }
         Command::Commit { message } => {
+            let head_content = fs::read_to_string(".mimir/HEAD")?;
             
+            let ref_path = head_content.trim().strip_prefix("ref: ").unwrap();
+            let branch_file_path = format!(".mimir/{}", ref_path);
+            
+            let parent_hash = if std::path::Path::new(&branch_file_path).exists() {
+                Some(std::fs::read_to_string(&branch_file_path)?.trim().to_string())
+            } else {
+                None
+            };
+            
+            let tree_hash= build_tree(std::path::Path::new("."))?;
+            
+            let commit_hash = write_commit(&tree_hash, &message, parent_hash.as_deref())?;
+            
+            if let Some(parent_dir) = std::path::Path::new(&branch_file_path).parent() {
+                std::fs::create_dir_all(parent_dir)?;
+            }
+            std::fs::write(&branch_file_path, format!("{}\n",commit_hash))?;
+            
+            println!("Commited to branch main: {}", commit_hash);
         }
     }
 
