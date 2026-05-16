@@ -7,7 +7,7 @@ use sha1::{Digest, Sha1};
 use std::fs;
 use std::io::Read;
 use std::io::Write;
-
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about=None)]
@@ -29,6 +29,15 @@ enum Command {
         object: String,
     },
     WriteTree,
+    CommitTree {
+        tree: String,
+
+        #[arg(short = 'm')]
+        message: String,
+
+        #[arg(short = 'p')]
+        parent: Option<String>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -67,6 +76,60 @@ fn main() -> Result<()> {
         Command::WriteTree => {
             let hash = build_tree(std::path::Path::new("."))?;
             println!("{}", hash)
+        }
+        Command::CommitTree {
+            tree,
+            message,
+            parent,
+        } => {
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+
+            let mut commit_content = String::new();
+            commit_content.push_str(&format!("tree {}\n", tree));
+
+            if let Some(parent_hash) = parent {
+                commit_content.push_str(&format!("parent {}\n", parent_hash));
+            }
+
+            commit_content.push_str(&format!(
+                "author Mimir User <mimir@example.com> {} +0000\n",
+                timestamp
+            ));
+            commit_content.push_str(&format!(
+                "committer Mimir User <mimir@example.com> {} +0000\n",
+                timestamp
+            ));
+            commit_content.push_str("\n");
+            commit_content.push_str(&format!("{}\n", message));
+
+            let commit_bytes = commit_content.into_bytes();
+            let header = format!("commit {}\0", commit_bytes.len());
+            let mut store = header.into_bytes();
+            store.extend(commit_bytes);
+
+            let mut hasher = Sha1::new();
+            hasher.update(&store);
+
+            let hash_result = hasher.finalize();
+            let hash_hex = hex::encode(hash_result);
+
+            let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+            encoder.write_all(&store)?;
+            let compressed_bytes = encoder.finish()?;
+
+            let directory_name = &hash_hex[..2];
+            let filename = &hash_hex[2..];
+
+            fs::create_dir_all(format!(".mimir/objects/{}", directory_name))?;
+            fs::write(
+                format!(".mimir/objects/{}/{}", directory_name, filename),
+                compressed_bytes,
+            )?;
+
+            println!("{}", hash_hex);
         }
     }
 
