@@ -110,7 +110,7 @@ cargo run -- hash-object test.txt
 ```
 
 ### Cat File
-Read and print the contents of a stored object.
+Read and print the contents of a stored object, along with its compressed size and storage path.
 
 ```bash
 cargo run -- cat-file -p 8ab686eafeb1f44702738c8b0f24f2567c36da6d
@@ -118,6 +118,7 @@ cargo run -- cat-file -p 8ab686eafeb1f44702738c8b0f24f2567c36da6d
 **Example output:**
 ```
 Hello, world
+32 .mimir/objects/8a/b686eafeb1f44702738c8b0f24f2567c36da6d
 ```
 
 ### Write Tree
