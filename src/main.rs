@@ -1,8 +1,8 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use flate2::Compression;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
-use flate2::Compression;
 use sha1::{Digest, Sha1};
 use std::fs;
 use std::io::Read;
@@ -116,7 +116,7 @@ fn main() -> Result<()> {
             }
             std::fs::write(&branch_file_path, format!("{}\n", commit_hash))?;
 
-            println!("Commited to branch main: {}", commit_hash);
+            println!("Committed to branch main: {}", commit_hash);
         }
         Command::Log => {
             let head_content = std::fs::read_to_string(".mimir/HEAD")?;
